@@ -1,6 +1,7 @@
 import { DefectDetail } from '../types/inspection';
 import { getAllSamples } from './sampleStorage';
 import { findSimilarSample } from './imageSimilarity';
+import { getSettings } from './settingsStorage';
 
 export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]> => {
   return new Promise(async (resolve) => {
@@ -23,6 +24,11 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
       // サンプル画像を取得
       const samples = getAllSamples();
 
+      // 設定から類似度閾値を取得
+      const settings = getSettings();
+      const threshold = settings.similarityThreshold;
+      console.log('Using similarity threshold:', (threshold * 100).toFixed(0) + '%');
+
       // サンプルが登録されている場合は、サンプルとの類似度比較を行う
       if (samples.length > 0) {
         const pixelAnalysis = analyzePixels(imageData);
@@ -43,7 +49,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             darkSpotSamples,
-            0.5 // 閾値を0.65から0.5に下げる
+            threshold
           );
           console.log('黒点 similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 
@@ -66,7 +72,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             scratchSamples,
-            0.5 // 閾値を0.65から0.5に下げる
+            threshold
           );
           console.log('キズ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 
@@ -89,7 +95,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             flashSamples,
-            0.5 // 閾値を0.65から0.5に下げる
+            threshold
           );
           console.log('フラッシュ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, Sliders } from 'lucide-react';
 import { Camera } from './Camera';
 import { ResultDisplay } from './ResultDisplay';
 import { SampleManager } from './SampleManager';
+import { SettingsModal } from './SettingsModal';
 import { Toast } from './Toast';
 import { DefectType, InspectionResult, DefectDetail } from '../types/inspection';
 import { playOKSound, playNGSound } from '../utils/audio';
@@ -12,6 +13,7 @@ export const InspectionFlow = () => {
   const [result, setResult] = useState<InspectionResult | null>(null);
   const [defectType, setDefectType] = useState<DefectType | undefined>();
   const [showSampleManager, setShowSampleManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [sampleCount, setSampleCount] = useState(getAllSamples().length);
   const [toastDefects, setToastDefects] = useState<DefectDetail[] | null>(null);
 
@@ -62,12 +64,22 @@ export const InspectionFlow = () => {
           </h1>
 
           {/* 右側のコントロール */}
-          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {/* サンプル数表示 */}
             <div className="text-xs sm:text-sm">
               <span className="text-gray-400 hidden sm:inline">登録サンプル:</span>
               <span className="ml-1 sm:ml-2 font-bold">{sampleCount}件</span>
             </div>
+
+            {/* 検査設定ボタン */}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-1 p-2 sm:px-3 sm:py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors active:scale-95"
+              title="検査設定"
+            >
+              <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline text-sm">設定</span>
+            </button>
 
             {/* サンプル管理ボタン */}
             <button
@@ -87,6 +99,7 @@ export const InspectionFlow = () => {
       </div>
 
       {showSampleManager && <SampleManager onClose={handleSampleManagerClose} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {toastDefects && <Toast defects={toastDefects} onClose={handleCloseToast} />}
     </div>
   );

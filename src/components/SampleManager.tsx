@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Upload, Trash2, X, Image as ImageIcon } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, Trash2, X, Image as ImageIcon, Camera as CameraIcon } from 'lucide-react';
 import { DefectSample, DefectType } from '../types/inspection';
 import { saveSample, getAllSamples, deleteSample } from '../utils/sampleStorage';
 import { resizeImage, getBase64Size } from '../utils/imageResize';
@@ -16,7 +16,16 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
   const [sampleName, setSampleName] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string>('');
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // モーダル表示時に背景スクロールを防止
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     console.log('File select triggered');
@@ -79,6 +88,10 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
         setSamples(updatedSamples);
         setSampleName('');
 
+        // 両方のinputをリセット
+        if (cameraInputRef.current) {
+          cameraInputRef.current.value = '';
+        }
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
@@ -118,10 +131,18 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
   const filteredSamples = samples.filter((s) => s.type === selectedType);
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+    <div
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4 overflow-hidden"
+      onClick={(e) => {
+        // 背景クリックで閉じる
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
         {/* ヘッダー - モバイル最適化 */}
-        <div className="flex items-center justify-between p-4 sm:p-6 border-b">
+        <div className="flex-shrink-0 flex items-center justify-between p-4 sm:p-6 border-b">
           <h2 className="text-lg sm:text-2xl font-bold">欠陥サンプル管理</h2>
           <button
             onClick={onClose}
@@ -180,39 +201,76 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
                 </div>
               )}
 
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="file-upload"
-                  disabled={isUploading}
-                />
-                <label
-                  htmlFor="file-upload"
-                  className={`flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg transition-colors ${
-                    isUploading
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-500 hover:bg-blue-600 cursor-pointer active:bg-blue-700'
-                  } text-white text-sm sm:text-base font-medium`}
-                >
-                  {isUploading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                      <span>アップロード中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-5 h-5" />
-                      <span>写真を撮影 / 画像を選択</span>
-                    </>
-                  )}
-                </label>
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  モバイル: カメラで撮影 | PC: ファイルを選択
+              <div className="space-y-3">
+                {/* カメラ撮影ボタン */}
+                <div>
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="camera-upload"
+                    disabled={isUploading}
+                  />
+                  <label
+                    htmlFor="camera-upload"
+                    className={`flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg transition-colors ${
+                      isUploading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-blue-500 hover:bg-blue-600 cursor-pointer active:bg-blue-700'
+                    } text-white text-sm sm:text-base font-medium`}
+                  >
+                    {isUploading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        <span>アップロード中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CameraIcon className="w-5 h-5" />
+                        <span>カメラで撮影</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                {/* ファイル選択ボタン */}
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                    disabled={isUploading}
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className={`flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg transition-colors ${
+                      isUploading
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-500 hover:bg-green-600 cursor-pointer active:bg-green-700'
+                    } text-white text-sm sm:text-base font-medium`}
+                  >
+                    {isUploading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                        <span>アップロード中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5" />
+                        <span>ファイルから選択</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                <p className="text-xs text-gray-500 text-center">
+                  カメラ撮影またはギャラリーから画像を選択できます
                 </p>
               </div>
             </div>
@@ -260,7 +318,7 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
         </div>
 
         {/* フッター - モバイル最適化 */}
-        <div className="p-4 sm:p-6 border-t bg-gray-50">
+        <div className="flex-shrink-0 p-4 sm:p-6 border-t bg-gray-50">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
             <h4 className="font-bold text-blue-900 mb-2 text-sm sm:text-base">💡 使い方</h4>
             <ul className="text-xs sm:text-sm text-blue-800 space-y-1">
