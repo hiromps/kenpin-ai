@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, Scan } from 'lucide-react';
+import { RotateCcw, Scan, ZoomIn, ZoomOut } from 'lucide-react';
 import { useRealtimeScanning } from '../hooks/useRealtimeScanning';
 import { DefectDetail } from '../types/inspection';
 
@@ -11,8 +11,16 @@ interface CameraProps {
 export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
+  const [zoom, setZoom] = useState(1);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+
+  // ピンチジェスチャー用
+  const lastTouchDistanceRef = useRef<number>(0);
+  const isPinchingRef = useRef(false);
 
   const { isScanning } = useRealtimeScanning({
     videoRef,
@@ -21,6 +29,58 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
     onDefectDetected,
     scanInterval: 500,
   });
+
+  // ズーム機能
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(prev + 0.5, 5)); // 最大5倍
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(prev - 0.5, 1)); // 最小1倍
+  };
+
+  const handleZoomReset = () => {
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
+  };
+
+  // マウスホイールでズーム
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY * -0.001;
+    setZoom((prev) => Math.max(1, Math.min(5, prev + delta)));
+  };
+
+  // ピンチジェスチャーでズーム
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      isPinchingRef.current = true;
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lastTouchDistanceRef.current = distance;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && isPinchingRef.current) {
+      e.preventDefault();
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+
+      const delta = (distance - lastTouchDistanceRef.current) * 0.01;
+      setZoom((prev) => Math.max(1, Math.min(5, prev + delta)));
+      lastTouchDistanceRef.current = distance;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isPinchingRef.current = false;
+  };
 
   useEffect(() => {
     const startCamera = async () => {
@@ -97,20 +157,36 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
   }
 
   return (
-    <div className="relative w-full h-full bg-black">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        className="w-full h-full object-cover"
-      />
+    <div
+      ref={containerRef}
+      className="relative w-full h-full bg-black overflow-hidden"
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div
+        style={{
+          transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+          transformOrigin: 'center center',
+          transition: isPinchingRef.current ? 'none' : 'transform 0.1s ease-out',
+        }}
+        className="w-full h-full"
+      >
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover"
+        />
 
-      {/* 欠陥ハイライト用のCanvasオーバーレイ */}
-      <canvas
-        ref={overlayCanvasRef}
-        className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
-      />
+        {/* 欠陥ハイライト用のCanvasオーバーレイ */}
+        <canvas
+          ref={overlayCanvasRef}
+          className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
+        />
+      </div>
 
       {/* スキャン状態インジケーター - モバイル最適化 */}
       <div className="absolute top-2 left-2 sm:top-4 sm:left-4 bg-black/80 text-white px-3 py-2 sm:px-6 sm:py-3 rounded-lg backdrop-blur-sm">
@@ -132,6 +208,36 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
         </div>
       </div>
 
+      {/* ズームコントロール - モバイル最適化 */}
+      <div className="absolute top-16 right-2 sm:top-20 sm:right-4 flex flex-col gap-2">
+        {/* ズームイン */}
+        <button
+          onClick={handleZoomIn}
+          disabled={zoom >= 5}
+          className="bg-black/80 text-white p-2 sm:p-3 rounded-full shadow-lg backdrop-blur-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/90 transition-all"
+        >
+          <ZoomIn className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+
+        {/* ズーム表示 & リセット */}
+        <button
+          onClick={handleZoomReset}
+          disabled={zoom === 1}
+          className="bg-black/80 text-white px-2 py-1 sm:px-3 sm:py-2 rounded-lg shadow-lg backdrop-blur-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/90 transition-all"
+        >
+          <span className="text-xs sm:text-sm font-bold">{zoom.toFixed(1)}x</span>
+        </button>
+
+        {/* ズームアウト */}
+        <button
+          onClick={handleZoomOut}
+          disabled={zoom <= 1}
+          className="bg-black/80 text-white p-2 sm:p-3 rounded-full shadow-lg backdrop-blur-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/90 transition-all"
+        >
+          <ZoomOut className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+      </div>
+
       {/* 使用方法 - モバイル最適化 */}
       <div className="absolute bottom-4 left-2 right-2 sm:bottom-8 sm:left-8 sm:right-8 px-3 sm:px-0">
         <div className="bg-black/80 text-white p-4 sm:p-6 rounded-lg backdrop-blur-sm">
@@ -139,6 +245,7 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
           <ul className="text-xs sm:text-sm space-y-1 text-gray-300">
             <li>• オブジェクトをゆっくり回転</li>
             <li>• 欠陥を自動検出してNG判定</li>
+            <li>• ズーム機能で細部を検査可能</li>
             <li>• 全面をスキャンしてください</li>
           </ul>
         </div>
