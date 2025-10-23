@@ -3,9 +3,8 @@ import { Settings } from 'lucide-react';
 import { Camera } from './Camera';
 import { ResultDisplay } from './ResultDisplay';
 import { SampleManager } from './SampleManager';
-import { CapturedImage, DefectType, InspectionResult, DefectDetail } from '../types/inspection';
+import { DefectType, InspectionResult, DefectDetail } from '../types/inspection';
 import { playOKSound, playNGSound } from '../utils/audio';
-import { supabase } from '../lib/supabase';
 import { getAllSamples } from '../utils/sampleStorage';
 
 export const InspectionFlow = () => {
@@ -13,45 +12,20 @@ export const InspectionFlow = () => {
   const [defectType, setDefectType] = useState<DefectType | undefined>();
   const [showSampleManager, setShowSampleManager] = useState(false);
   const [sampleCount, setSampleCount] = useState(getAllSamples().length);
-  const [deviceId] = useState(() => {
-    const stored = localStorage.getItem('deviceId');
-    if (stored) return stored;
-    const newId = `DEVICE-${Date.now()}`;
-    localStorage.setItem('deviceId', newId);
-    return newId;
-  });
 
-  const handleDefectDetected = async (defects: DefectDetail[], imageDataUrl: string) => {
-    try {
-      const hasDefects = defects.length > 0;
-      const inspectionResult: InspectionResult = hasDefects ? 'NG' : 'OK';
-      const primaryDefect = defects.length > 0 ? defects[0].type : undefined;
+  const handleDefectDetected = (defects: DefectDetail[], imageDataUrl: string) => {
+    const hasDefects = defects.length > 0;
+    const inspectionResult: InspectionResult = hasDefects ? 'NG' : 'OK';
+    const primaryDefect = defects.length > 0 ? defects[0].type : undefined;
 
-      if (inspectionResult === 'OK') {
-        playOKSound();
-      } else {
-        playNGSound();
-      }
-
-      setResult(inspectionResult);
-      setDefectType(primaryDefect);
-
-      const capturedImage: CapturedImage = {
-        faceNumber: 1,
-        dataUrl: imageDataUrl,
-        timestamp: Date.now(),
-      };
-
-      await supabase.from('inspections').insert({
-        result: inspectionResult,
-        defect_type: primaryDefect || null,
-        defect_details: defects,
-        images: [capturedImage],
-        device_id: deviceId,
-      });
-    } catch (error) {
-      console.error('検品エラー:', error);
+    if (inspectionResult === 'OK') {
+      playOKSound();
+    } else {
+      playNGSound();
     }
+
+    setResult(inspectionResult);
+    setDefectType(primaryDefect);
   };
 
   const handleNext = () => {
