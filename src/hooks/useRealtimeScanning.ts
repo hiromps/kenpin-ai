@@ -8,6 +8,7 @@ interface RealtimeScanningOptions {
   isActive: boolean;
   onDefectDetected: (defects: DefectDetail[], imageDataUrl: string) => void;
   scanInterval?: number; // ミリ秒単位のスキャン間隔（デフォルト: 500ms）
+  focusPoint?: { x: number; y: number } | null; // タップした位置（0-1の範囲）
 }
 
 export const useRealtimeScanning = ({
@@ -16,6 +17,7 @@ export const useRealtimeScanning = ({
   isActive,
   onDefectDetected,
   scanInterval = 500,
+  focusPoint = null,
 }: RealtimeScanningOptions) => {
   const [isScanning, setIsScanning] = useState(false);
   const [lastScanTime, setLastScanTime] = useState(0);
@@ -105,13 +107,36 @@ export const useRealtimeScanning = ({
     const context = canvas.getContext('2d');
     if (!context) return null;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // フォーカスポイントが指定されている場合は、その周辺領域のみを切り出す
+    if (focusPoint) {
+      // フォーカス領域のサイズ（ビデオの40%）
+      const focusSize = 0.4;
+      const focusWidth = video.videoWidth * focusSize;
+      const focusHeight = video.videoHeight * focusSize;
 
-    context.drawImage(video, 0, 0);
+      // フォーカスポイントを中心とした領域の座標
+      const sx = Math.max(0, video.videoWidth * focusPoint.x - focusWidth / 2);
+      const sy = Math.max(0, video.videoHeight * focusPoint.y - focusHeight / 2);
+      const sw = Math.min(focusWidth, video.videoWidth - sx);
+      const sh = Math.min(focusHeight, video.videoHeight - sy);
+
+      canvas.width = sw;
+      canvas.height = sh;
+
+      // 指定領域のみを描画
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      console.log(`🎯 フォーカス検出モード: 中心(${(focusPoint.x * 100).toFixed(0)}%, ${(focusPoint.y * 100).toFixed(0)}%) 領域サイズ: ${sw.toFixed(0)}x${sh.toFixed(0)}px`);
+    } else {
+      // フォーカスポイントが指定されていない場合は全画面
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      context.drawImage(video, 0, 0);
+    }
 
     return canvas.toDataURL('image/jpeg', 0.8);
-  }, [videoRef]);
+  }, [videoRef, focusPoint]);
 
   const scanFrame = useCallback(async () => {
     if (!isActive || !videoRef.current) return;

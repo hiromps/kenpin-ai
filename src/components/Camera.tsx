@@ -18,6 +18,10 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
 
+  // フォーカスポイント用
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [showFocusIndicator, setShowFocusIndicator] = useState(false);
+
   // ピンチジェスチャー用
   const lastTouchDistanceRef = useRef<number>(0);
   const isPinchingRef = useRef(false);
@@ -28,6 +32,7 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
     isActive,
     onDefectDetected,
     scanInterval: 500,
+    focusPoint,
   });
 
   // ズーム機能
@@ -80,6 +85,54 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
 
   const handleTouchEnd = () => {
     isPinchingRef.current = false;
+  };
+
+  // タップ/クリックでフォーカスポイント設定
+  const handleFocusPoint = (e: React.MouseEvent | React.TouchEvent) => {
+    // ピンチ中は無視
+    if (isPinchingRef.current) return;
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    let clientX: number;
+    let clientY: number;
+
+    if ('touches' in e && e.touches.length === 1) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else {
+      return;
+    }
+
+    // コンテナ内の相対座標（0-1の範囲）
+    const x = (clientX - rect.left) / rect.width;
+    const y = (clientY - rect.top) / rect.height;
+
+    setFocusPoint({ x, y });
+    setShowFocusIndicator(true);
+
+    // フォーカスインジケーターを2秒後に非表示
+    setTimeout(() => {
+      setShowFocusIndicator(false);
+    }, 2000);
+
+    // カメラのフォーカスポイントを設定（対応している場合）
+    if (videoRef.current && stream) {
+      const videoTrack = stream.getVideoTracks()[0];
+      const capabilities = videoTrack.getCapabilities?.();
+
+      if (capabilities && 'focusMode' in capabilities) {
+        videoTrack.applyConstraints({
+          advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x, y }] } as any]
+        }).catch(() => {
+          // フォーカス設定に失敗しても続行（一部のデバイスでは非対応）
+        });
+      }
+    }
   };
 
   useEffect(() => {
@@ -164,6 +217,7 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onClick={handleFocusPoint}
     >
       <div
         style={{
@@ -186,6 +240,28 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
           ref={overlayCanvasRef}
           className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
         />
+
+        {/* フォーカスインジケーター */}
+        {showFocusIndicator && focusPoint && (
+          <div
+            className="absolute w-16 h-16 sm:w-20 sm:h-20 pointer-events-none"
+            style={{
+              left: `${focusPoint.x * 100}%`,
+              top: `${focusPoint.y * 100}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            {/* 外側の円 */}
+            <div className="absolute inset-0 border-2 border-yellow-400 rounded-full animate-ping opacity-75"></div>
+            {/* 内側の円 */}
+            <div className="absolute inset-0 border-2 border-yellow-400 rounded-full"></div>
+            {/* 十字線 */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute w-full h-0.5 bg-yellow-400"></div>
+              <div className="absolute w-0.5 h-full bg-yellow-400"></div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* スキャン状態インジケーター - モバイル最適化 */}
@@ -245,8 +321,8 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
           <ul className="text-xs sm:text-sm space-y-1 text-gray-300">
             <li>• オブジェクトをゆっくり回転</li>
             <li>• 欠陥を自動検出してNG判定</li>
+            <li>• タップで部分検出（焦点検査）</li>
             <li>• ズーム機能で細部を検査可能</li>
-            <li>• 全面をスキャンしてください</li>
           </ul>
         </div>
       </div>
