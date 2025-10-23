@@ -108,12 +108,37 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
       return;
     }
 
-    // コンテナ内の相対座標（0-1の範囲）
-    const x = (clientX - rect.left) / rect.width;
-    const y = (clientY - rect.top) / rect.height;
+    // コンテナ内のクリック座標（ピクセル単位）
+    const clickX = clientX - rect.left;
+    const clickY = clientY - rect.top;
 
-    setFocusPoint({ x, y });
+    // コンテナの中心座標
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+
+    // 中心からのオフセット（ピクセル単位）
+    const offsetX = clickX - centerX;
+    const offsetY = clickY - centerY;
+
+    // ズームとパンの逆変換
+    // transform: scale(zoom) translate(panX, panY) の逆変換
+    // 1. パンの影響を除去（panは変換後の座標系での移動）
+    // 2. ズームの影響を除去
+    const actualOffsetX = (offsetX - panX) / zoom;
+    const actualOffsetY = (offsetY - panY) / zoom;
+
+    // 実際のビデオ座標（0-1の範囲）
+    const x = (actualOffsetX + centerX) / rect.width;
+    const y = (actualOffsetY + centerY) / rect.height;
+
+    // 範囲を0-1にクランプ
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+
+    setFocusPoint({ x: clampedX, y: clampedY });
     setShowFocusIndicator(true);
+
+    console.log(`🎯 フォーカス設定: (${(clampedX * 100).toFixed(0)}%, ${(clampedY * 100).toFixed(0)}%) ズーム: ${zoom.toFixed(1)}x`);
 
     // フォーカスインジケーターを2秒後に非表示
     setTimeout(() => {
@@ -127,7 +152,7 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
 
       if (capabilities && 'focusMode' in capabilities) {
         videoTrack.applyConstraints({
-          advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x, y }] } as any]
+          advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x: clampedX, y: clampedY }] } as any]
         }).catch(() => {
           // フォーカス設定に失敗しても続行（一部のデバイスでは非対応）
         });
