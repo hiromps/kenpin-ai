@@ -61,43 +61,38 @@ export const calculateImageSimilarity = async (
 
 /**
  * フラッシュ（成形不良）専用の類似度計算
- * テクスチャ、表面粗さ、光沢パターンに特化
+ * より厳格な一致判定で誤検出を防止
  */
 const calculateFlashSimilarity = (imageData1: ImageData, imageData2: ImageData): number => {
-  // 1. テクスチャエネルギー比較（最重要）
+  // 1. RGB各チャンネルのヒストグラム比較（基本的な色分布の一致）
+  const histogramSimilarity = compareRGBHistograms(imageData1, imageData2);
+
+  // 2. 構造的類似性（SSIM）- 全体的な構造パターン
+  const structuralSimilarity = compareStructure(imageData1, imageData2);
+
+  // 3. テクスチャエネルギー比較
   const textureSimilarity = compareTexture(imageData1, imageData2);
 
-  // 2. 表面粗さの比較
-  const roughnessSimilarity = compareSurfaceRoughness(imageData1, imageData2);
+  // 4. 表面粗さの比較（厳格版）
+  const roughnessSimilarity = compareSurfaceRoughnessStrict(imageData1, imageData2);
 
-  // 3. 光沢パターンの比較
-  const glossSimilarity = compareGlossPattern(imageData1, imageData2);
+  // 5. 局所的な分散の比較（厳格版）
+  const varianceSimilarity = compareLocalVarianceStrict(imageData1, imageData2);
 
-  // 4. 局所的な分散の比較
-  const varianceSimilarity = compareLocalVariance(imageData1, imageData2);
-
-  // 5. 高周波成分の比較
-  const frequencySimilarity = compareHighFrequency(imageData1, imageData2);
-
-  // 6. エッジの不規則性比較
-  const edgeIrregularity = compareEdgeIrregularity(imageData1, imageData2);
-
-  // フラッシュ特化の重み付け
+  // フラッシュ特化の重み付け（基本的な一致を重視）
   const totalSimilarity =
-    textureSimilarity * 0.30 +        // テクスチャ（最重要）
-    roughnessSimilarity * 0.25 +      // 表面粗さ
-    glossSimilarity * 0.15 +          // 光沢パターン
-    varianceSimilarity * 0.15 +       // 局所分散
-    frequencySimilarity * 0.10 +      // 高周波成分
-    edgeIrregularity * 0.05;          // エッジ不規則性
+    histogramSimilarity * 0.35 +      // RGBヒストグラム（基本一致）
+    structuralSimilarity * 0.30 +     // 構造的類似性（パターン一致）
+    textureSimilarity * 0.20 +        // テクスチャ
+    roughnessSimilarity * 0.10 +      // 表面粗さ
+    varianceSimilarity * 0.05;        // 局所分散
 
   console.log('Flash-specific similarity breakdown:', {
+    histogram: histogramSimilarity.toFixed(3),
+    structural: structuralSimilarity.toFixed(3),
     texture: textureSimilarity.toFixed(3),
     roughness: roughnessSimilarity.toFixed(3),
-    gloss: glossSimilarity.toFixed(3),
     variance: varianceSimilarity.toFixed(3),
-    frequency: frequencySimilarity.toFixed(3),
-    edgeIrregularity: edgeIrregularity.toFixed(3),
     total: totalSimilarity.toFixed(3),
   });
 
@@ -431,13 +426,19 @@ const compareTexture = (imageData1: ImageData, imageData2: ImageData): number =>
   const texture1 = calculateTextureEnergy(imageData1);
   const texture2 = calculateTextureEnergy(imageData2);
 
-  // エネルギー、コントラスト、均一性の比較
-  let similarity = 0;
-  similarity += 1 - Math.abs(texture1.energy - texture2.energy);
-  similarity += 1 - Math.abs(texture1.contrast - texture2.contrast) / 100;
-  similarity += 1 - Math.abs(texture1.homogeneity - texture2.homogeneity);
+  // エネルギー、コントラスト、均一性の比較（厳格版）
+  const energyDiff = Math.abs(texture1.energy - texture2.energy);
+  const contrastDiff = Math.abs(texture1.contrast - texture2.contrast);
+  const homogeneityDiff = Math.abs(texture1.homogeneity - texture2.homogeneity);
 
-  return Math.max(0, similarity / 3);
+  // 正規化された差分（コントラストは0-255の範囲）
+  const energySim = Math.exp(-energyDiff * 10);
+  const contrastSim = Math.exp(-contrastDiff / 50);
+  const homogeneitySim = Math.exp(-homogeneityDiff * 5);
+
+  const similarity = (energySim + contrastSim + homogeneitySim) / 3;
+
+  return Math.max(0, Math.min(1, similarity));
 };
 
 const calculateTextureEnergy = (imageData: ImageData) => {
@@ -489,14 +490,17 @@ const calculateTextureEnergy = (imageData: ImageData) => {
 };
 
 /**
- * 表面粗さの比較
+ * 表面粗さの比較（厳格版）
  */
-const compareSurfaceRoughness = (imageData1: ImageData, imageData2: ImageData): number => {
+const compareSurfaceRoughnessStrict = (imageData1: ImageData, imageData2: ImageData): number => {
   const roughness1 = calculateRoughness(imageData1);
   const roughness2 = calculateRoughness(imageData2);
 
+  // 差分を厳しく評価（10%以上の差で類似度大幅低下）
   const diff = Math.abs(roughness1 - roughness2);
-  return Math.max(0, 1 - diff);
+  const similarity = Math.exp(-diff * 20); // 指数関数で急激に減衰
+
+  return Math.max(0, Math.min(1, similarity));
 };
 
 const calculateRoughness = (imageData: ImageData): number => {
@@ -589,14 +593,20 @@ const calculateGlossPattern = (imageData: ImageData) => {
 };
 
 /**
- * 局所的な分散の比較
+ * 局所的な分散の比較（厳格版）
  */
-const compareLocalVariance = (imageData1: ImageData, imageData2: ImageData): number => {
+const compareLocalVarianceStrict = (imageData1: ImageData, imageData2: ImageData): number => {
   const variance1 = calculateLocalVariance(imageData1);
   const variance2 = calculateLocalVariance(imageData2);
 
-  const diff = Math.abs(variance1 - variance2);
-  return Math.max(0, 1 - diff);
+  // 相対的な差分を計算（0に近い場合の除算エラー回避）
+  const avgVariance = (variance1 + variance2) / 2;
+  if (avgVariance < 0.0001) return 1.0; // 両方とも非常に均一な場合
+
+  const relativeDiff = Math.abs(variance1 - variance2) / avgVariance;
+  const similarity = Math.exp(-relativeDiff * 5); // 指数関数で減衰
+
+  return Math.max(0, Math.min(1, similarity));
 };
 
 const calculateLocalVariance = (imageData: ImageData): number => {
