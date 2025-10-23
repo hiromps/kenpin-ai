@@ -23,7 +23,16 @@ export const calculateImageSimilarity = async (
     const edgeSimilarity = compareEdges(imageData1, imageData2);
 
     // 総合的な類似度（重み付け平均）
-    return histogramSimilarity * 0.4 + pixelSimilarity * 0.3 + edgeSimilarity * 0.3;
+    const totalSimilarity = histogramSimilarity * 0.4 + pixelSimilarity * 0.3 + edgeSimilarity * 0.3;
+
+    console.log('Similarity breakdown:', {
+      histogram: histogramSimilarity.toFixed(3),
+      pixel: pixelSimilarity.toFixed(3),
+      edge: edgeSimilarity.toFixed(3),
+      total: totalSimilarity.toFixed(3),
+    });
+
+    return totalSimilarity;
   } catch (error) {
     console.error('Image similarity calculation failed:', error);
     return 0;

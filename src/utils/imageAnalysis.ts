@@ -27,71 +27,86 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
       if (samples.length > 0) {
         const pixelAnalysis = analyzePixels(imageData);
 
-        // 黒点のサンプルとの比較
-        if (pixelAnalysis.darkSpots > 5) {
-          const darkSpotSamples = samples
-            .filter((s) => s.type === '黒点')
-            .map((s) => s.imageDataUrl);
+        console.log('Pixel analysis:', {
+          darkSpots: pixelAnalysis.darkSpots,
+          brightness: pixelAnalysis.brightness,
+          irregularity: pixelAnalysis.irregularity,
+        });
 
-          if (darkSpotSamples.length > 0) {
-            const { isSimilar, maxSimilarity } = await findSimilarSample(
-              imageDataUrl,
-              darkSpotSamples,
-              0.65
-            );
-            if (isSimilar) {
-              defects.push({
-                type: '黒点',
-                confidence: maxSimilarity,
-                location: pixelAnalysis.darkSpotLocation || undefined,
-              });
-            }
+        // 黒点のサンプルとの比較（条件を緩和: darkSpots > 0）
+        const darkSpotSamples = samples
+          .filter((s) => s.type === '黒点')
+          .map((s) => s.imageDataUrl);
+
+        if (darkSpotSamples.length > 0) {
+          console.log(`Checking against ${darkSpotSamples.length} 黒点 samples`);
+          const { isSimilar, maxSimilarity } = await findSimilarSample(
+            imageDataUrl,
+            darkSpotSamples,
+            0.5 // 閾値を0.65から0.5に下げる
+          );
+          console.log('黒点 similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+
+          if (isSimilar) {
+            defects.push({
+              type: '黒点',
+              confidence: maxSimilarity,
+              location: pixelAnalysis.darkSpotLocation || undefined,
+            });
           }
         }
 
-        // キズのサンプルとの比較
-        if (pixelAnalysis.brightness < 80) {
-          const scratchSamples = samples
-            .filter((s) => s.type === 'キズ')
-            .map((s) => s.imageDataUrl);
+        // キズのサンプルとの比較（常にチェック）
+        const scratchSamples = samples
+          .filter((s) => s.type === 'キズ')
+          .map((s) => s.imageDataUrl);
 
-          if (scratchSamples.length > 0) {
-            const { isSimilar, maxSimilarity } = await findSimilarSample(
-              imageDataUrl,
-              scratchSamples,
-              0.65
-            );
-            if (isSimilar) {
-              defects.push({
-                type: 'キズ',
-                confidence: maxSimilarity,
-                location: pixelAnalysis.darkSpotLocation || undefined,
-              });
-            }
+        if (scratchSamples.length > 0) {
+          console.log(`Checking against ${scratchSamples.length} キズ samples`);
+          const { isSimilar, maxSimilarity } = await findSimilarSample(
+            imageDataUrl,
+            scratchSamples,
+            0.5 // 閾値を0.65から0.5に下げる
+          );
+          console.log('キズ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+
+          if (isSimilar) {
+            defects.push({
+              type: 'キズ',
+              confidence: maxSimilarity,
+              location: pixelAnalysis.darkSpotLocation || undefined,
+            });
           }
         }
 
-        // フラッシュのサンプルとの比較
-        if (pixelAnalysis.irregularity > 30) {
-          const flashSamples = samples
-            .filter((s) => s.type === 'フラッシュ')
-            .map((s) => s.imageDataUrl);
+        // フラッシュのサンプルとの比較（常にチェック）
+        const flashSamples = samples
+          .filter((s) => s.type === 'フラッシュ')
+          .map((s) => s.imageDataUrl);
 
-          if (flashSamples.length > 0) {
-            const { isSimilar, maxSimilarity } = await findSimilarSample(
-              imageDataUrl,
-              flashSamples,
-              0.65
-            );
-            if (isSimilar) {
-              defects.push({
-                type: 'フラッシュ',
-                confidence: maxSimilarity,
-                location: pixelAnalysis.irregularLocation || undefined,
-              });
-            }
+        if (flashSamples.length > 0) {
+          console.log(`Checking against ${flashSamples.length} フラッシュ samples`);
+          const { isSimilar, maxSimilarity } = await findSimilarSample(
+            imageDataUrl,
+            flashSamples,
+            0.5 // 閾値を0.65から0.5に下げる
+          );
+          console.log('フラッシュ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+
+          if (isSimilar) {
+            defects.push({
+              type: 'フラッシュ',
+              confidence: maxSimilarity,
+              location: pixelAnalysis.irregularLocation || undefined,
+            });
           }
         }
+      }
+
+      if (defects.length > 0) {
+        console.log('✅ Defects detected:', defects.map(d => `${d.type} (${(d.confidence * 100).toFixed(1)}%)`).join(', '));
+      } else {
+        console.log('✓ No defects detected');
       }
 
       resolve(defects);
