@@ -3,6 +3,7 @@ import { Settings } from 'lucide-react';
 import { Camera } from './Camera';
 import { ResultDisplay } from './ResultDisplay';
 import { SampleManager } from './SampleManager';
+import { Toast } from './Toast';
 import { DefectType, InspectionResult, DefectDetail } from '../types/inspection';
 import { playOKSound, playNGSound } from '../utils/audio';
 import { getAllSamples } from '../utils/sampleStorage';
@@ -12,6 +13,7 @@ export const InspectionFlow = () => {
   const [defectType, setDefectType] = useState<DefectType | undefined>();
   const [showSampleManager, setShowSampleManager] = useState(false);
   const [sampleCount, setSampleCount] = useState(getAllSamples().length);
+  const [toastDefects, setToastDefects] = useState<DefectDetail[] | null>(null);
 
   const handleDefectDetected = (defects: DefectDetail[], imageDataUrl: string) => {
     const hasDefects = defects.length > 0;
@@ -22,10 +24,16 @@ export const InspectionFlow = () => {
       playOKSound();
     } else {
       playNGSound();
+      // 欠陥検出時にトーストを表示
+      setToastDefects(defects);
     }
 
     setResult(inspectionResult);
     setDefectType(primaryDefect);
+  };
+
+  const handleCloseToast = () => {
+    setToastDefects(null);
   };
 
   const handleNext = () => {
@@ -79,6 +87,7 @@ export const InspectionFlow = () => {
       </div>
 
       {showSampleManager && <SampleManager onClose={handleSampleManagerClose} />}
+      {toastDefects && <Toast defects={toastDefects} onClose={handleCloseToast} />}
     </div>
   );
 };
