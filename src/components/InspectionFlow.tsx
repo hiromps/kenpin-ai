@@ -95,7 +95,7 @@ export const InspectionFlow = () => {
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <Camera onDefectDetected={handleDefectDetected} isActive={!showSampleManager} />
+        <Camera onDefectDetected={handleDefectDetected} isActive={!showSampleManager && !showSettings} />
       </div>
 
       {showSampleManager && <SampleManager onClose={handleSampleManagerClose} />}
