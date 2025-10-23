@@ -4,7 +4,8 @@
  */
 export const calculateImageSimilarity = async (
   imageDataUrl1: string,
-  imageDataUrl2: string
+  imageDataUrl2: string,
+  defectType?: string
 ): Promise<number> => {
   try {
     const [imageData1, imageData2] = await Promise.all([
@@ -13,6 +14,11 @@ export const calculateImageSimilarity = async (
     ]);
 
     if (!imageData1 || !imageData2) return 0;
+
+    // フラッシュ専用の高精度検出
+    if (defectType === 'フラッシュ') {
+      return calculateFlashSimilarity(imageData1, imageData2);
+    }
 
     // 1. RGB各チャンネルのヒストグラム比較
     const histogramSimilarity = compareRGBHistograms(imageData1, imageData2);
@@ -51,6 +57,51 @@ export const calculateImageSimilarity = async (
     console.error('Image similarity calculation failed:', error);
     return 0;
   }
+};
+
+/**
+ * フラッシュ（成形不良）専用の類似度計算
+ * テクスチャ、表面粗さ、光沢パターンに特化
+ */
+const calculateFlashSimilarity = (imageData1: ImageData, imageData2: ImageData): number => {
+  // 1. テクスチャエネルギー比較（最重要）
+  const textureSimilarity = compareTexture(imageData1, imageData2);
+
+  // 2. 表面粗さの比較
+  const roughnessSimilarity = compareSurfaceRoughness(imageData1, imageData2);
+
+  // 3. 光沢パターンの比較
+  const glossSimilarity = compareGlossPattern(imageData1, imageData2);
+
+  // 4. 局所的な分散の比較
+  const varianceSimilarity = compareLocalVariance(imageData1, imageData2);
+
+  // 5. 高周波成分の比較
+  const frequencySimilarity = compareHighFrequency(imageData1, imageData2);
+
+  // 6. エッジの不規則性比較
+  const edgeIrregularity = compareEdgeIrregularity(imageData1, imageData2);
+
+  // フラッシュ特化の重み付け
+  const totalSimilarity =
+    textureSimilarity * 0.30 +        // テクスチャ（最重要）
+    roughnessSimilarity * 0.25 +      // 表面粗さ
+    glossSimilarity * 0.15 +          // 光沢パターン
+    varianceSimilarity * 0.15 +       // 局所分散
+    frequencySimilarity * 0.10 +      // 高周波成分
+    edgeIrregularity * 0.05;          // エッジ不規則性
+
+  console.log('Flash-specific similarity breakdown:', {
+    texture: textureSimilarity.toFixed(3),
+    roughness: roughnessSimilarity.toFixed(3),
+    gloss: glossSimilarity.toFixed(3),
+    variance: varianceSimilarity.toFixed(3),
+    frequency: frequencySimilarity.toFixed(3),
+    edgeIrregularity: edgeIrregularity.toFixed(3),
+    total: totalSimilarity.toFixed(3),
+  });
+
+  return totalSimilarity;
 };
 
 const getImageData = (imageDataUrl: string): Promise<ImageData | null> => {
@@ -354,14 +405,15 @@ const detectEdges = (imageData: ImageData): number[] => {
 export const findSimilarSample = async (
   imageDataUrl: string,
   sampleImages: string[],
-  threshold: number = 0.7
+  threshold: number = 0.7,
+  defectType?: string
 ): Promise<{ isSimilar: boolean; maxSimilarity: number }> => {
   if (sampleImages.length === 0) {
     return { isSimilar: false, maxSimilarity: 0 };
   }
 
   const similarities = await Promise.all(
-    sampleImages.map((sampleUrl) => calculateImageSimilarity(imageDataUrl, sampleUrl))
+    sampleImages.map((sampleUrl) => calculateImageSimilarity(imageDataUrl, sampleUrl, defectType))
   );
 
   const maxSimilarity = Math.max(...similarities);
@@ -370,4 +422,314 @@ export const findSimilarSample = async (
     isSimilar: maxSimilarity >= threshold,
     maxSimilarity,
   };
+};
+
+/**
+ * テクスチャエネルギー比較（Gray Level Co-occurrence Matrix風）
+ */
+const compareTexture = (imageData1: ImageData, imageData2: ImageData): number => {
+  const texture1 = calculateTextureEnergy(imageData1);
+  const texture2 = calculateTextureEnergy(imageData2);
+
+  // エネルギー、コントラスト、均一性の比較
+  let similarity = 0;
+  similarity += 1 - Math.abs(texture1.energy - texture2.energy);
+  similarity += 1 - Math.abs(texture1.contrast - texture2.contrast) / 100;
+  similarity += 1 - Math.abs(texture1.homogeneity - texture2.homogeneity);
+
+  return Math.max(0, similarity / 3);
+};
+
+const calculateTextureEnergy = (imageData: ImageData) => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let energy = 0;
+  let contrast = 0;
+  let homogeneity = 0;
+  let count = 0;
+
+  // 8x8ブロックでテクスチャ特徴を計算
+  const blockSize = 8;
+  for (let y = 0; y < height - blockSize; y += blockSize) {
+    for (let x = 0; x < width - blockSize; x += blockSize) {
+      const blockValues: number[] = [];
+
+      for (let by = 0; by < blockSize; by++) {
+        for (let bx = 0; bx < blockSize; bx++) {
+          const idx = ((y + by) * width + (x + bx)) * 4;
+          const luminance = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+          blockValues.push(luminance);
+        }
+      }
+
+      // エネルギー（均一性）
+      const mean = blockValues.reduce((a, b) => a + b, 0) / blockValues.length;
+      const variance = blockValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / blockValues.length;
+      energy += variance;
+
+      // コントラスト
+      const maxVal = Math.max(...blockValues);
+      const minVal = Math.min(...blockValues);
+      contrast += (maxVal - minVal);
+
+      // 均一性
+      homogeneity += 1 / (1 + variance);
+
+      count++;
+    }
+  }
+
+  return {
+    energy: energy / count / 10000, // 正規化
+    contrast: contrast / count,
+    homogeneity: homogeneity / count,
+  };
+};
+
+/**
+ * 表面粗さの比較
+ */
+const compareSurfaceRoughness = (imageData1: ImageData, imageData2: ImageData): number => {
+  const roughness1 = calculateRoughness(imageData1);
+  const roughness2 = calculateRoughness(imageData2);
+
+  const diff = Math.abs(roughness1 - roughness2);
+  return Math.max(0, 1 - diff);
+};
+
+const calculateRoughness = (imageData: ImageData): number => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let totalRoughness = 0;
+  let count = 0;
+
+  // 局所的な勾配の標準偏差を計算
+  for (let y = 1; y < height - 1; y += 2) {
+    for (let x = 1; x < width - 1; x += 2) {
+      const idx = (y * width + x) * 4;
+
+      const getLuminance = (offset: number) => {
+        const i = idx + offset;
+        return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      };
+
+      // 周囲8方向の勾配
+      const gradients = [
+        Math.abs(getLuminance(0) - getLuminance(-width * 4)),     // 上
+        Math.abs(getLuminance(0) - getLuminance(width * 4)),      // 下
+        Math.abs(getLuminance(0) - getLuminance(-4)),             // 左
+        Math.abs(getLuminance(0) - getLuminance(4)),              // 右
+        Math.abs(getLuminance(0) - getLuminance(-width * 4 - 4)), // 左上
+        Math.abs(getLuminance(0) - getLuminance(-width * 4 + 4)), // 右上
+        Math.abs(getLuminance(0) - getLuminance(width * 4 - 4)),  // 左下
+        Math.abs(getLuminance(0) - getLuminance(width * 4 + 4)),  // 右下
+      ];
+
+      const mean = gradients.reduce((a, b) => a + b, 0) / gradients.length;
+      const variance = gradients.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / gradients.length;
+
+      totalRoughness += Math.sqrt(variance);
+      count++;
+    }
+  }
+
+  return totalRoughness / count / 100; // 正規化
+};
+
+/**
+ * 光沢パターンの比較
+ */
+const compareGlossPattern = (imageData1: ImageData, imageData2: ImageData): number => {
+  const gloss1 = calculateGlossPattern(imageData1);
+  const gloss2 = calculateGlossPattern(imageData2);
+
+  // 高輝度領域の分布を比較
+  const brightDiff = Math.abs(gloss1.brightRatio - gloss2.brightRatio);
+  const patternDiff = Math.abs(gloss1.patternComplexity - gloss2.patternComplexity);
+
+  return Math.max(0, 1 - (brightDiff + patternDiff) / 2);
+};
+
+const calculateGlossPattern = (imageData: ImageData) => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let brightPixels = 0;
+  let totalPixels = 0;
+  const brightThreshold = 200; // 高輝度の閾値
+
+  let patternChanges = 0;
+  let prevBright = false;
+
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const idx = (y * width + x) * 4;
+      const luminance = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+
+      const isBright = luminance > brightThreshold;
+      if (isBright) brightPixels++;
+
+      // パターンの変化をカウント
+      if (isBright !== prevBright) patternChanges++;
+      prevBright = isBright;
+
+      totalPixels++;
+    }
+  }
+
+  return {
+    brightRatio: brightPixels / totalPixels,
+    patternComplexity: patternChanges / totalPixels,
+  };
+};
+
+/**
+ * 局所的な分散の比較
+ */
+const compareLocalVariance = (imageData1: ImageData, imageData2: ImageData): number => {
+  const variance1 = calculateLocalVariance(imageData1);
+  const variance2 = calculateLocalVariance(imageData2);
+
+  const diff = Math.abs(variance1 - variance2);
+  return Math.max(0, 1 - diff);
+};
+
+const calculateLocalVariance = (imageData: ImageData): number => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let totalVariance = 0;
+  let count = 0;
+
+  // 16x16ブロックで局所分散を計算
+  const blockSize = 16;
+  for (let y = 0; y < height - blockSize; y += blockSize) {
+    for (let x = 0; x < width - blockSize; x += blockSize) {
+      const blockValues: number[] = [];
+
+      for (let by = 0; by < blockSize; by += 2) {
+        for (let bx = 0; bx < blockSize; bx += 2) {
+          const idx = ((y + by) * width + (x + bx)) * 4;
+          const luminance = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+          blockValues.push(luminance);
+        }
+      }
+
+      const mean = blockValues.reduce((a, b) => a + b, 0) / blockValues.length;
+      const variance = blockValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / blockValues.length;
+
+      totalVariance += variance;
+      count++;
+    }
+  }
+
+  return totalVariance / count / 10000; // 正規化
+};
+
+/**
+ * 高周波成分の比較（細かいテクスチャ）
+ */
+const compareHighFrequency = (imageData1: ImageData, imageData2: ImageData): number => {
+  const freq1 = calculateHighFrequency(imageData1);
+  const freq2 = calculateHighFrequency(imageData2);
+
+  const diff = Math.abs(freq1 - freq2);
+  return Math.max(0, 1 - diff);
+};
+
+const calculateHighFrequency = (imageData: ImageData): number => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let highFreqEnergy = 0;
+  let count = 0;
+
+  // ラプラシアンフィルタで高周波成分を抽出
+  for (let y = 1; y < height - 1; y += 2) {
+    for (let x = 1; x < width - 1; x += 2) {
+      const idx = (y * width + x) * 4;
+
+      const getLuminance = (offset: number) => {
+        const i = idx + offset;
+        return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      };
+
+      // ラプラシアンカーネル
+      const laplacian =
+        -4 * getLuminance(0) +
+        getLuminance(-width * 4) +
+        getLuminance(width * 4) +
+        getLuminance(-4) +
+        getLuminance(4);
+
+      highFreqEnergy += Math.abs(laplacian);
+      count++;
+    }
+  }
+
+  return highFreqEnergy / count / 1000; // 正規化
+};
+
+/**
+ * エッジの不規則性比較
+ */
+const compareEdgeIrregularity = (imageData1: ImageData, imageData2: ImageData): number => {
+  const irregularity1 = calculateEdgeIrregularity(imageData1);
+  const irregularity2 = calculateEdgeIrregularity(imageData2);
+
+  const diff = Math.abs(irregularity1 - irregularity2);
+  return Math.max(0, 1 - diff);
+};
+
+const calculateEdgeIrregularity = (imageData: ImageData): number => {
+  const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
+  let irregularity = 0;
+  let count = 0;
+
+  for (let y = 2; y < height - 2; y += 2) {
+    for (let x = 2; x < width - 2; x += 2) {
+      const idx = (y * width + x) * 4;
+
+      const getLuminance = (offset: number) => {
+        const i = idx + offset;
+        return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      };
+
+      // Sobelでエッジ強度を計算
+      const gx =
+        -getLuminance(-width * 4 - 4) + getLuminance(-width * 4 + 4) -
+        2 * getLuminance(-4) + 2 * getLuminance(4) -
+        getLuminance(width * 4 - 4) + getLuminance(width * 4 + 4);
+
+      const gy =
+        -getLuminance(-width * 4 - 4) - 2 * getLuminance(-width * 4) - getLuminance(-width * 4 + 4) +
+        getLuminance(width * 4 - 4) + 2 * getLuminance(width * 4) + getLuminance(width * 4 + 4);
+
+      const edgeStrength = Math.sqrt(gx * gx + gy * gy);
+
+      // 周囲のエッジ強度との差を計算（不規則性）
+      const neighbors = [
+        Math.sqrt(Math.pow(gx + 1, 2) + Math.pow(gy, 2)),
+        Math.sqrt(Math.pow(gx - 1, 2) + Math.pow(gy, 2)),
+        Math.sqrt(Math.pow(gx, 2) + Math.pow(gy + 1, 2)),
+        Math.sqrt(Math.pow(gx, 2) + Math.pow(gy - 1, 2)),
+      ];
+
+      const meanNeighbor = neighbors.reduce((a, b) => a + b, 0) / neighbors.length;
+      irregularity += Math.abs(edgeStrength - meanNeighbor);
+      count++;
+    }
+  }
+
+  return irregularity / count / 100; // 正規化
 };

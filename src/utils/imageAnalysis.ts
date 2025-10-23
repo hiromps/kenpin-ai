@@ -88,17 +88,18 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           }
         }
 
-        // フラッシュのサンプルとの比較
+        // フラッシュのサンプルとの比較（専用アルゴリズム使用）
         const flashSamples = samples
           .filter((s) => s.type === 'フラッシュ')
           .map((s) => s.imageDataUrl);
 
         if (flashSamples.length > 0) {
-          console.log(`Checking against ${flashSamples.length} フラッシュ samples (threshold: ${(settings.thresholds.フラッシュ * 100).toFixed(0)}%)`);
+          console.log(`Checking against ${flashSamples.length} フラッシュ samples (threshold: ${(settings.thresholds.フラッシュ * 100).toFixed(0)}%) [使用: フラッシュ専用アルゴリズム]`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             flashSamples,
-            settings.thresholds.フラッシュ
+            settings.thresholds.フラッシュ,
+            'フラッシュ' // フラッシュ専用の類似度計算を使用
           );
           console.log('フラッシュ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 
