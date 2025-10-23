@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Upload, Trash2, X, Image as ImageIcon } from 'lucide-react';
 import { DefectSample, DefectType } from '../types/inspection';
 import { saveSample, getAllSamples, deleteSample } from '../utils/sampleStorage';
+import { resizeImage, getBase64Size } from '../utils/imageResize';
 
 interface SampleManagerProps {
   onClose: () => void;
@@ -45,7 +46,7 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
 
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       console.log('File loaded successfully');
       const imageDataUrl = e.target?.result as string;
 
@@ -57,11 +58,16 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
       }
 
       try {
+        // 画像をリサイズ（800x800、品質80%）
+        console.log('Original image size:', getBase64Size(imageDataUrl).toFixed(2), 'KB');
+        const resizedImageDataUrl = await resizeImage(imageDataUrl, 800, 800, 0.8);
+        console.log('Resized image size:', getBase64Size(resizedImageDataUrl).toFixed(2), 'KB');
+
         const newSample: DefectSample = {
           id: `sample_${Date.now()}`,
           type: selectedType,
           name: sampleName || `${selectedType}サンプル${samples.filter((s) => s.type === selectedType).length + 1}`,
-          imageDataUrl,
+          imageDataUrl: resizedImageDataUrl,
           createdAt: Date.now(),
         };
 
@@ -80,7 +86,15 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
         setIsUploading(false);
       } catch (error) {
         console.error('Error saving sample:', error);
-        setUploadError('サンプルの保存に失敗しました');
+        if (error instanceof Error) {
+          if (error.message.includes('quota') || error.message.includes('storage')) {
+            setUploadError('ストレージ容量が不足しています。他のサンプルを削除してください。');
+          } else {
+            setUploadError(`サンプルの保存に失敗しました: ${error.message}`);
+          }
+        } else {
+          setUploadError('サンプルの保存に失敗しました');
+        }
         setIsUploading(false);
       }
     };
@@ -171,6 +185,7 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   onChange={handleFileSelect}
                   className="hidden"
                   id="file-upload"
@@ -181,21 +196,24 @@ export const SampleManager = ({ onClose }: SampleManagerProps) => {
                   className={`flex items-center justify-center gap-2 w-full px-4 py-3 rounded-lg transition-colors ${
                     isUploading
                       ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-blue-500 hover:bg-blue-600 cursor-pointer'
-                  } text-white`}
+                      : 'bg-blue-500 hover:bg-blue-600 cursor-pointer active:bg-blue-700'
+                  } text-white text-sm sm:text-base font-medium`}
                 >
                   {isUploading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                      アップロード中...
+                      <span>アップロード中...</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-5 h-5" />
-                      画像を選択
+                      <span>写真を撮影 / 画像を選択</span>
                     </>
                   )}
                 </label>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  モバイル: カメラで撮影 | PC: ファイルを選択
+                </p>
               </div>
             </div>
           </div>

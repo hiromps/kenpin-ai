@@ -3,9 +3,26 @@ import { DefectSample, DefectType } from '../types/inspection';
 const STORAGE_KEY = 'defect_samples';
 
 export const saveSample = (sample: DefectSample): void => {
-  const samples = getAllSamples();
-  samples.push(sample);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(samples));
+  try {
+    const samples = getAllSamples();
+    samples.push(sample);
+    const jsonString = JSON.stringify(samples);
+
+    // localStorageに保存を試みる
+    localStorage.setItem(STORAGE_KEY, jsonString);
+
+    console.log('Sample saved successfully. Total samples:', samples.length);
+  } catch (error) {
+    console.error('Failed to save sample:', error);
+
+    // QuotaExceededError（容量超過）の場合
+    if (error instanceof DOMException &&
+        (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      throw new Error('ストレージ容量が不足しています。他のサンプルを削除してください。');
+    }
+
+    throw new Error('サンプルの保存に失敗しました。もう一度お試しください。');
+  }
 };
 
 export const getAllSamples = (): DefectSample[] => {
