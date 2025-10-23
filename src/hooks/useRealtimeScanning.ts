@@ -4,6 +4,7 @@ import { DefectDetail } from '../types/inspection';
 
 interface RealtimeScanningOptions {
   videoRef: React.RefObject<HTMLVideoElement>;
+  overlayCanvasRef: React.RefObject<HTMLCanvasElement>;
   isActive: boolean;
   onDefectDetected: (defects: DefectDetail[], imageDataUrl: string) => void;
   scanInterval?: number; // ミリ秒単位のスキャン間隔（デフォルト: 500ms）
@@ -11,6 +12,7 @@ interface RealtimeScanningOptions {
 
 export const useRealtimeScanning = ({
   videoRef,
+  overlayCanvasRef,
   isActive,
   onDefectDetected,
   scanInterval = 500,
@@ -19,6 +21,75 @@ export const useRealtimeScanning = ({
   const [lastScanTime, setLastScanTime] = useState(0);
   const animationFrameRef = useRef<number>();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ハイライトを描画する関数
+  const drawHighlights = useCallback((defects: DefectDetail[]) => {
+    if (!overlayCanvasRef.current || !videoRef.current) return;
+
+    const canvas = overlayCanvasRef.current;
+    const video = videoRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // キャンバスサイズを動画サイズに合わせる
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // 既存の描画をクリア
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 各欠陥のハイライトを描画
+    defects.forEach((defect) => {
+      if (!defect.location) return;
+
+      const { x, y, width, height } = defect.location;
+
+      // 欠陥タイプに応じた色を設定
+      let color = '#ef4444'; // 赤（デフォルト）
+      if (defect.type === '黒点') {
+        color = '#ef4444'; // 赤
+      } else if (defect.type === 'キズ') {
+        color = '#f97316'; // オレンジ
+      } else if (defect.type === 'フラッシュ') {
+        color = '#eab308'; // 黄色
+      }
+
+      // 矩形を描画
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x, y, width, height);
+
+      // 半透明の背景
+      ctx.fillStyle = color + '40'; // 25%透明度
+      ctx.fillRect(x, y, width, height);
+
+      // ラベルを描画
+      ctx.fillStyle = color;
+      ctx.font = 'bold 24px Arial';
+      const label = `${defect.type} ${(defect.confidence * 100).toFixed(0)}%`;
+      const textMetrics = ctx.measureText(label);
+      const textX = x;
+      const textY = y - 10;
+
+      // ラベル背景
+      ctx.fillRect(textX, textY - 24, textMetrics.width + 10, 30);
+
+      // ラベルテキスト
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(label, textX + 5, textY);
+    });
+  }, [overlayCanvasRef, videoRef]);
+
+  // ハイライトをクリアする関数
+  const clearHighlights = useCallback(() => {
+    if (!overlayCanvasRef.current) return;
+
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }, [overlayCanvasRef]);
 
   const captureFrame = useCallback((): string | null => {
     if (!videoRef.current) return null;
@@ -69,9 +140,12 @@ export const useRealtimeScanning = ({
 
       // 欠陥が見つかった場合
       if (defects.length > 0) {
+        drawHighlights(defects); // ハイライト表示
         onDefectDetected(defects, imageDataUrl);
         setIsScanning(false);
         return; // スキャンを停止
+      } else {
+        clearHighlights(); // ハイライトをクリア
       }
     } catch (error) {
       console.error('スキャンエラー:', error);
@@ -79,7 +153,7 @@ export const useRealtimeScanning = ({
 
     setIsScanning(false);
     animationFrameRef.current = requestAnimationFrame(scanFrame);
-  }, [isActive, videoRef, lastScanTime, scanInterval, captureFrame, onDefectDetected]);
+  }, [isActive, videoRef, lastScanTime, scanInterval, captureFrame, onDefectDetected, drawHighlights, clearHighlights]);
 
   useEffect(() => {
     if (isActive && videoRef.current) {

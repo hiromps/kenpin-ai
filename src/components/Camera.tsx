@@ -10,11 +10,13 @@ interface CameraProps {
 
 export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
 
   const { isScanning } = useRealtimeScanning({
     videoRef,
+    overlayCanvasRef,
     isActive,
     onDefectDetected,
     scanInterval: 500,
@@ -102,6 +104,12 @@ export const Camera = ({ onDefectDetected, isActive }: CameraProps) => {
         playsInline
         muted
         className="w-full h-full object-cover"
+      />
+
+      {/* 欠陥ハイライト用のCanvasオーバーレイ */}
+      <canvas
+        ref={overlayCanvasRef}
+        className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
       />
 
       {/* スキャン状態インジケーター - モバイル最適化 */}

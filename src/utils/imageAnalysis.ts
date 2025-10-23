@@ -43,6 +43,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
               defects.push({
                 type: '黒点',
                 confidence: maxSimilarity,
+                location: pixelAnalysis.darkSpotLocation || undefined,
               });
             }
           }
@@ -64,6 +65,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
               defects.push({
                 type: 'キズ',
                 confidence: maxSimilarity,
+                location: pixelAnalysis.darkSpotLocation || undefined,
               });
             }
           }
@@ -85,6 +87,7 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
               defects.push({
                 type: 'フラッシュ',
                 confidence: maxSimilarity,
+                location: pixelAnalysis.irregularLocation || undefined,
               });
             }
           }
@@ -99,39 +102,91 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
 
 const analyzePixels = (imageData: ImageData) => {
   const data = imageData.data;
+  const width = imageData.width;
+  const height = imageData.height;
+
   let darkSpots = 0;
   let totalBrightness = 0;
   let irregularity = 0;
 
+  // 位置情報を記録
+  const darkPixels: {x: number, y: number}[] = [];
+  const irregularPixels: {x: number, y: number}[] = [];
+
   // より細かいサンプリングで小さな黒点も検出
   const sampleRate = 2;
 
-  for (let i = 0; i < data.length; i += 4 * sampleRate) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
+  for (let y = 0; y < height; y += sampleRate) {
+    for (let x = 0; x < width; x += sampleRate) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
 
-    const brightness = (r + g + b) / 3;
-    totalBrightness += brightness;
+      const brightness = (r + g + b) / 3;
+      totalBrightness += brightness;
 
-    // 黒点検出の閾値を調整（より敏感に）
-    if (brightness < 60) {
-      darkSpots++;
-    }
+      // 黒点検出の閾値を調整（より敏感に）
+      if (brightness < 60) {
+        darkSpots++;
+        darkPixels.push({x, y});
+      }
 
-    const variance = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
-    if (variance > 100) {
-      irregularity++;
+      const variance = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+      if (variance > 100) {
+        irregularity++;
+        irregularPixels.push({x, y});
+      }
     }
   }
 
-  const numSamples = data.length / (4 * sampleRate);
+  const numSamples = (width / sampleRate) * (height / sampleRate);
   const avgBrightness = totalBrightness / numSamples;
+
+  // バウンディングボックスを計算
+  const darkSpotLocation = calculateBoundingBox(darkPixels, width, height);
+  const irregularLocation = calculateBoundingBox(irregularPixels, width, height);
 
   return {
     darkSpots,
     brightness: avgBrightness,
     irregularity,
+    darkSpotLocation,
+    irregularLocation,
+  };
+};
+
+const calculateBoundingBox = (
+  pixels: {x: number, y: number}[],
+  imageWidth: number,
+  imageHeight: number
+) => {
+  if (pixels.length === 0) return null;
+
+  let minX = imageWidth;
+  let minY = imageHeight;
+  let maxX = 0;
+  let maxY = 0;
+
+  for (const pixel of pixels) {
+    minX = Math.min(minX, pixel.x);
+    minY = Math.min(minY, pixel.y);
+    maxX = Math.max(maxX, pixel.x);
+    maxY = Math.max(maxY, pixel.y);
+  }
+
+  // 少し余白を追加
+  const padding = 20;
+  minX = Math.max(0, minX - padding);
+  minY = Math.max(0, minY - padding);
+  maxX = Math.min(imageWidth, maxX + padding);
+  maxY = Math.min(imageHeight, maxY + padding);
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
   };
 };
 
