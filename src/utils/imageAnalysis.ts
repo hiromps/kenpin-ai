@@ -48,13 +48,13 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           .map((s) => s.imageDataUrl);
 
         if (darkSpotSamples.length > 0) {
-          console.log(`Checking against ${darkSpotSamples.length} 黒点 samples (threshold: ${(settings.thresholds.黒点 * 100).toFixed(0)}%)`);
+          console.log(`Checking against ${darkSpotSamples.length} 黒点 samples (threshold: ${(settings.thresholds.黒点 * 100).toFixed(0)}%) [判定: すべてのサンプルと一致が必要]`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             darkSpotSamples,
             settings.thresholds.黒点
           );
-          console.log('黒点 similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+          console.log(`  黒点 判定結果: ${isSimilar ? '✅ NG' : '✓ OK'} (平均類似度: ${(maxSimilarity * 100).toFixed(1)}%)`);
 
           if (isSimilar) {
             defects.push({
@@ -71,13 +71,13 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           .map((s) => s.imageDataUrl);
 
         if (scratchSamples.length > 0) {
-          console.log(`Checking against ${scratchSamples.length} キズ samples (threshold: ${(settings.thresholds.キズ * 100).toFixed(0)}%)`);
+          console.log(`Checking against ${scratchSamples.length} キズ samples (threshold: ${(settings.thresholds.キズ * 100).toFixed(0)}%) [判定: すべてのサンプルと一致が必要]`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             scratchSamples,
             settings.thresholds.キズ
           );
-          console.log('キズ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+          console.log(`  キズ 判定結果: ${isSimilar ? '✅ NG' : '✓ OK'} (平均類似度: ${(maxSimilarity * 100).toFixed(1)}%)`);
 
           if (isSimilar) {
             defects.push({
@@ -94,14 +94,14 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           .map((s) => s.imageDataUrl);
 
         if (flashSamples.length > 0) {
-          console.log(`Checking against ${flashSamples.length} フラッシュ samples (threshold: ${(settings.thresholds.フラッシュ * 100).toFixed(0)}%) [使用: フラッシュ専用アルゴリズム]`);
+          console.log(`Checking against ${flashSamples.length} フラッシュ samples (threshold: ${(settings.thresholds.フラッシュ * 100).toFixed(0)}%) [使用: フラッシュ専用アルゴリズム, 判定: すべてのサンプルと一致が必要]`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             flashSamples,
             settings.thresholds.フラッシュ,
             'フラッシュ' // フラッシュ専用の類似度計算を使用
           );
-          console.log('フラッシュ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
+          console.log(`  フラッシュ 判定結果: ${isSimilar ? '✅ NG' : '✓ OK'} (平均類似度: ${(maxSimilarity * 100).toFixed(1)}%)`);
 
           if (isSimilar) {
             defects.push({

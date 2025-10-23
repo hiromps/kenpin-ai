@@ -395,7 +395,8 @@ const detectEdges = (imageData: ImageData): number[] => {
 };
 
 /**
- * 画像が登録されたサンプルのいずれかと類似しているかチェック
+ * 画像が登録されたサンプルのすべてと類似しているかチェック
+ * （複数サンプル登録時は、すべてが閾値を超えている場合のみNG判定）
  */
 export const findSimilarSample = async (
   imageDataUrl: string,
@@ -411,11 +412,20 @@ export const findSimilarSample = async (
     sampleImages.map((sampleUrl) => calculateImageSimilarity(imageDataUrl, sampleUrl, defectType))
   );
 
+  // すべてのサンプル画像が閾値を超えている場合のみNG判定
+  const allSimilar = similarities.every(sim => sim >= threshold);
+  const matchedCount = similarities.filter(sim => sim >= threshold).length;
+
+  // 判定に使用する類似度（最小値 = 最も弱いリンク）
+  const minSimilarity = Math.min(...similarities);
   const maxSimilarity = Math.max(...similarities);
+  const avgSimilarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+
+  console.log(`  📊 類似度詳細: ${matchedCount}/${similarities.length}枚がマッチ (最小: ${(minSimilarity * 100).toFixed(1)}%, 最大: ${(maxSimilarity * 100).toFixed(1)}%, 平均: ${(avgSimilarity * 100).toFixed(1)}%)`);
 
   return {
-    isSimilar: maxSimilarity >= threshold,
-    maxSimilarity,
+    isSimilar: allSimilar,
+    maxSimilarity: avgSimilarity, // 平均類似度を返す（より代表的な値）
   };
 };
 
