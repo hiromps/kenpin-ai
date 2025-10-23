@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
 import { X, Save, RotateCcw } from 'lucide-react';
 import { InspectionSettings, getSettings, saveSettings, resetSettings } from '../utils/settingsStorage';
+import { DefectType } from '../types/inspection';
 
 interface SettingsModalProps {
   onClose: () => void;
 }
+
+const DEFECT_TYPES: DefectType[] = ['黒点', 'キズ', 'フラッシュ'];
+
+const DEFECT_COLORS = {
+  黒点: 'red',
+  キズ: 'orange',
+  フラッシュ: 'yellow',
+} as const;
 
 export const SettingsModal = ({ onClose }: SettingsModalProps) => {
   const [settings, setSettings] = useState<InspectionSettings>(getSettings());
@@ -34,7 +43,15 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
     }
   };
 
-  const thresholdPercentage = Math.round(settings.similarityThreshold * 100);
+  const handleThresholdChange = (type: DefectType, value: number) => {
+    setSettings({
+      ...settings,
+      thresholds: {
+        ...settings.thresholds,
+        [type]: value / 100,
+      },
+    });
+  };
 
   return (
     <div
@@ -59,59 +76,72 @@ export const SettingsModal = ({ onClose }: SettingsModalProps) => {
 
         {/* コンテンツ */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {/* 類似度閾値設定 */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-gray-700">
-                類似度の閾値
-              </label>
-              <div className="text-2xl font-bold text-blue-600">
-                {thresholdPercentage}%
-              </div>
-            </div>
+          {/* 欠陥タイプごとの閾値設定 */}
+          <div className="space-y-5">
+            <h3 className="text-base font-bold text-gray-900">欠陥タイプごとの類似度閾値</h3>
 
-            <input
-              type="range"
-              min="30"
-              max="90"
-              step="5"
-              value={thresholdPercentage}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  similarityThreshold: parseInt(e.target.value) / 100,
-                })
-              }
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-            />
+            {DEFECT_TYPES.map((type) => {
+              const percentage = Math.round(settings.thresholds[type] * 100);
+              const color = DEFECT_COLORS[type];
+              const colorClass =
+                color === 'red' ? 'text-red-600 accent-red-600' :
+                color === 'orange' ? 'text-orange-600 accent-orange-600' :
+                'text-yellow-600 accent-yellow-600';
+              const bgClass =
+                color === 'red' ? 'bg-red-50 border-red-200' :
+                color === 'orange' ? 'bg-orange-50 border-orange-200' :
+                'bg-yellow-50 border-yellow-200';
 
-            <div className="flex justify-between text-xs text-gray-500 mt-2">
-              <span>30%（緩い）</span>
-              <span>50%（推奨）</span>
-              <span>90%（厳しい）</span>
-            </div>
+              return (
+                <div key={type} className={`p-4 rounded-lg border-2 ${bgClass}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-bold text-gray-800">
+                      {type}
+                    </label>
+                    <div className={`text-xl font-bold ${colorClass}`}>
+                      {percentage}%
+                    </div>
+                  </div>
 
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-900 font-medium mb-2">
-                💡 閾値の目安
-              </p>
-              <ul className="text-xs text-blue-800 space-y-1">
-                <li>• <strong>30-40%</strong>: 誤検出のリスクが高い</li>
-                <li>• <strong>50-60%</strong>: バランス型（推奨）</li>
-                <li>• <strong>70-90%</strong>: 検出漏れのリスクが高い</li>
-              </ul>
-            </div>
+                  <input
+                    type="range"
+                    min="30"
+                    max="90"
+                    step="5"
+                    value={percentage}
+                    onChange={(e) => handleThresholdChange(type, parseInt(e.target.value))}
+                    className={`w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer ${colorClass}`}
+                  />
+
+                  <div className="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>緩い</span>
+                    <span>推奨</span>
+                    <span>厳しい</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* 説明 */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="font-bold text-sm text-blue-900 mb-2">
+              💡 閾値の設定ガイド
+            </h3>
+            <ul className="text-xs text-blue-800 space-y-1">
+              <li>• <strong>30-40%</strong>: 誤検出のリスクが高い</li>
+              <li>• <strong>50-60%</strong>: バランス型（推奨）</li>
+              <li>• <strong>70-90%</strong>: 検出漏れのリスクが高い</li>
+            </ul>
+          </div>
+
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="font-bold text-sm text-gray-900 mb-2">
               類似度閾値とは？
             </h3>
             <p className="text-xs text-gray-700 leading-relaxed">
               登録したサンプル画像と検査対象がどのくらい似ていれば欠陥と判定するかの基準です。
-              値を<strong>低く</strong>すると検出しやすくなりますが誤検出も増えます。
-              値を<strong>高く</strong>すると正確になりますが検出漏れが増えます。
+              欠陥タイプごとに個別に調整することで、より正確な検査が可能になります。
             </p>
           </div>
         </div>

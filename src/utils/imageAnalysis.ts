@@ -24,10 +24,13 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
       // サンプル画像を取得
       const samples = getAllSamples();
 
-      // 設定から類似度閾値を取得
+      // 設定から欠陥タイプごとの閾値を取得
       const settings = getSettings();
-      const threshold = settings.similarityThreshold;
-      console.log('Using similarity threshold:', (threshold * 100).toFixed(0) + '%');
+      console.log('Using thresholds:', {
+        黒点: (settings.thresholds.黒点 * 100).toFixed(0) + '%',
+        キズ: (settings.thresholds.キズ * 100).toFixed(0) + '%',
+        フラッシュ: (settings.thresholds.フラッシュ * 100).toFixed(0) + '%',
+      });
 
       // サンプルが登録されている場合は、サンプルとの類似度比較を行う
       if (samples.length > 0) {
@@ -39,17 +42,17 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           irregularity: pixelAnalysis.irregularity,
         });
 
-        // 黒点のサンプルとの比較（条件を緩和: darkSpots > 0）
+        // 黒点のサンプルとの比較
         const darkSpotSamples = samples
           .filter((s) => s.type === '黒点')
           .map((s) => s.imageDataUrl);
 
         if (darkSpotSamples.length > 0) {
-          console.log(`Checking against ${darkSpotSamples.length} 黒点 samples`);
+          console.log(`Checking against ${darkSpotSamples.length} 黒点 samples (threshold: ${(settings.thresholds.黒点 * 100).toFixed(0)}%)`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             darkSpotSamples,
-            threshold
+            settings.thresholds.黒点
           );
           console.log('黒点 similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 
@@ -62,17 +65,17 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           }
         }
 
-        // キズのサンプルとの比較（常にチェック）
+        // キズのサンプルとの比較
         const scratchSamples = samples
           .filter((s) => s.type === 'キズ')
           .map((s) => s.imageDataUrl);
 
         if (scratchSamples.length > 0) {
-          console.log(`Checking against ${scratchSamples.length} キズ samples`);
+          console.log(`Checking against ${scratchSamples.length} キズ samples (threshold: ${(settings.thresholds.キズ * 100).toFixed(0)}%)`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             scratchSamples,
-            threshold
+            settings.thresholds.キズ
           );
           console.log('キズ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 
@@ -85,17 +88,17 @@ export const analyzeImage = async (imageDataUrl: string): Promise<DefectDetail[]
           }
         }
 
-        // フラッシュのサンプルとの比較（常にチェック）
+        // フラッシュのサンプルとの比較
         const flashSamples = samples
           .filter((s) => s.type === 'フラッシュ')
           .map((s) => s.imageDataUrl);
 
         if (flashSamples.length > 0) {
-          console.log(`Checking against ${flashSamples.length} フラッシュ samples`);
+          console.log(`Checking against ${flashSamples.length} フラッシュ samples (threshold: ${(settings.thresholds.フラッシュ * 100).toFixed(0)}%)`);
           const { isSimilar, maxSimilarity } = await findSimilarSample(
             imageDataUrl,
             flashSamples,
-            threshold
+            settings.thresholds.フラッシュ
           );
           console.log('フラッシュ similarity:', maxSimilarity, 'isSimilar:', isSimilar);
 

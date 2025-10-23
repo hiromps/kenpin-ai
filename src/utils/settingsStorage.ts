@@ -1,11 +1,19 @@
 const SETTINGS_KEY = 'inspection_settings';
 
 export interface InspectionSettings {
-  similarityThreshold: number; // 0.0 ~ 1.0
+  thresholds: {
+    黒点: number;
+    キズ: number;
+    フラッシュ: number;
+  };
 }
 
 const DEFAULT_SETTINGS: InspectionSettings = {
-  similarityThreshold: 0.5, // デフォルト50%
+  thresholds: {
+    黒点: 0.5,      // デフォルト50%
+    キズ: 0.5,      // デフォルト50%
+    フラッシュ: 0.5, // デフォルト50%
+  },
 };
 
 export const getSettings = (): InspectionSettings => {
